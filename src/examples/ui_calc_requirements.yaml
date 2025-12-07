@@ -1,0 +1,13 @@
+feature: "Cloud.ru Price Calculator"
+requirements:
+  - id: "REQ_BTN_ADD_SERVICE_VISIBLE"
+    block: "BLOCK_1_START_PAGE"
+    title: "Кнопка 'Добавить сервис' отображается и кликабельна"
+    description: "На начальной странице калькулятора в блоке 'Расчет' пользователь видит кнопку 'Добавить сервис'. Кнопка активна."
+    priority: "CRITICAL"
+
+  - id: "REQ_CURRENT_TOTAL_VISIBLE"
+    block: "BLOCK_1_START_PAGE"
+    title: "Отображается текущая общая стоимость с НДС"
+    description: "В блоке 'Расчет' всегда отображается текущая сумма в месяц с НДС."
+    priority: "NORMAL"
