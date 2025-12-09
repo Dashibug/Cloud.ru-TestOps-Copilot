@@ -11,12 +11,15 @@ if str(SRC_DIR) not in sys.path:
     sys.path.append(str(SRC_DIR))
 
 from cloudru_agent.orchestrator.orchestrator import AgentOrchestrator  # noqa: E402
-
+from cloudru_agent.analyzers.coverage_analyzer import CoverageAnalyzer  # noqa: E402
+from cloudru_agent.analyzers.standards_checker import StandardsChecker  # noqa: E402
 
 EXAMPLES_DIR = SRC_DIR / "examples"
 DEFAULT_UI_REQ_FILE = EXAMPLES_DIR / "ui_calc_requirements_text.md"
-GENERATED_UI_DIR = SRC_DIR / "generated" / "from_text"
 
+# куда кладём результаты генерации
+GENERATED_UI_DIR = SRC_DIR / "generated" / "from_text"
+GENERATED_API_DIR = SRC_DIR / "generated" / "api_from_openapi"
 
 def load_default_ui_requirements() -> str:
     if DEFAULT_UI_REQ_FILE.exists():
@@ -93,9 +96,12 @@ def main() -> None:
         layout="wide",
     )
 
-    # флаг, что в текущей сессии уже генерили UI-тесты
+    # флаг, что в текущей сессии уже генерили UI-тесты и API-тесты
     if "ui_generated" not in st.session_state:
         st.session_state["ui_generated"] = False
+
+    if "api_generated" not in st.session_state:
+        st.session_state["api_generated"] = False
 
     inject_cloudru_css()
 
@@ -116,7 +122,9 @@ def main() -> None:
     )
 
     # --- верхний уровень: два кейса ---
-    ui_tab, api_tab = st.tabs(["UI калькулятор цен", "API Evolution Compute (v3)"])
+    ui_tab, api_tab, analytics_tab = st.tabs(
+        ["UI калькулятор цен", "API Evolution Compute (v3)", "Аналитика"]
+    )
 
     # =====================================================================
     # ТАБ 1. UI калькулятор
@@ -215,41 +223,184 @@ def main() -> None:
     # ТАБ 2. API Evolution Compute (заглушка под второй кейс)
     # =====================================================================
     with api_tab:
-        st.subheader("API Evolution Compute: генерация тестов (в разработке)")
-        st.caption(
-            "Здесь будет генерация ручных кейсов и pytest-тестов по OpenAPI 3.0 "
-            "для разделов VMs, Disks, Flavors."
-        )
+        left, right = st.columns([1, 1])
 
-        col1, col2 = st.columns([1, 1])
+        with left:
+            st.subheader("1. OpenAPI-спецификация Evolution Compute v3")
+            st.caption(
+                "Загрузите OpenAPI 3.0 (yaml/json) для разделов VMs, Disks, Flavors "
+                "или вставьте текст спецификации."
+            )
 
-        with col1:
             openapi_file = st.file_uploader(
                 "Загрузите OpenAPI 3.0 спецификацию (yaml/json)",
-                type=["yaml", "yml", "json"],
+                type=["yaml", "yml", "json", "txt"],
                 key="openapi_uploader",
             )
-            st.text_area(
-                "Или вставьте сюда фрагмент OpenAPI со схемой операции",
-                height=250,
+            openapi_text_area = st.text_area(
+                "Или вставьте сюда содержимое OpenAPI",
+                height=300,
                 key="openapi_text",
             )
 
-            if st.button("Сгенерировать API-тесты"):
-                st.warning(
-                    "Поддержка API-кейса сейчас в разработке. "
-                    "В бэкенде уже есть каркас для OpenAPI-парсера и генераторов; "
-                    "на защите мы покажем этот сценарий как следующий шаг."
+            openapi_text = ""
+            if openapi_file is not None:
+                openapi_text = openapi_file.read().decode("utf-8")
+            elif openapi_text_area.strip():
+                openapi_text = openapi_text_area
+
+            col_btn1, col_btn2 = st.columns(2)
+            with col_btn1:
+                generate_api_button = st.button("Сгенерировать API-тесты")
+            with col_btn2:
+                clear_api_button = st.button("Очистить API-результаты")
+
+            if generate_api_button:
+                if not openapi_text.strip():
+                    st.error("Загрузите файл OpenAPI или вставьте текст спецификации.")
+                else:
+                    with st.spinner(
+                        "Разбираем OpenAPI и генерируем API-тесты (manual + pytest)..."
+                    ):
+                        orchestrator = AgentOrchestrator()
+                        orchestrator.generate_api_from_openapi_text(
+                            openapi_text,
+                            str(GENERATED_API_DIR),
+                        )
+                    st.session_state["api_generated"] = True
+                    st.success("Готово! API-тесты сгенерированы.")
+
+            if clear_api_button:
+                shutil.rmtree(GENERATED_API_DIR, ignore_errors=True)
+                st.session_state["api_generated"] = False
+                st.success("Результаты по API очищены.")
+
+        with right:
+            st.subheader("2. Сгенерированные артефакты для API")
+
+            manual_api_dir = GENERATED_API_DIR / "manual_api"
+            auto_api_dir = GENERATED_API_DIR / "auto_api"
+
+            if manual_api_dir.exists() or auto_api_dir.exists():
+                tab_manual_api, tab_auto_api = st.tabs(
+                    ["Ручные тест-кейсы (Allure)", "Pytest-тесты для API"]
                 )
 
-        with col2:
-            st.info(
-                "План по API-кейсу:\n"
-                "• разобрать OpenAPI 3.0 на операции VMs / Disks / Flavors;\n"
-                "• сгенерировать ручные кейсы в формате Allure TestOps as Code;\n"
-                "• сгенерировать pytest-тесты с проверками кода ответа и схем;\n"
-                "• использовать Evolution FM для подбора позитивных и негативных сценариев."
-            )
+                with tab_manual_api:
+                    if not manual_api_dir.exists():
+                        st.info("Ручные API-кейсы ещё не сгенерированы.")
+                    else:
+                        for file in sorted(manual_api_dir.glob("*.py")):
+                            with st.expander(f"📄 {file.name}"):
+                                st.code(
+                                    file.read_text(encoding="utf-8"),
+                                    language="python",
+                                )
+
+                with tab_auto_api:
+                    if not auto_api_dir.exists():
+                        st.info("API-автотесты ещё не сгенерированы.")
+                    else:
+                        for file in sorted(auto_api_dir.glob("*.py")):
+                            with st.expander(f"⚙️ {file.name}"):
+                                st.code(
+                                    file.read_text(encoding="utf-8"),
+                                    language="python",
+                                )
+            else:
+                st.info(
+                    "Пока ничего не сгенерировано. Загрузите OpenAPI-спеку слева и "
+                    "нажмите «Сгенерировать API-тесты»."
+                )
+        # =====================================================================
+        # ТАБ 3. Аналитика
+        # =====================================================================
+        with analytics_tab:
+            st.subheader("Аналитика покрытия и стандартов")
+
+            manual_ui_dir = GENERATED_UI_DIR / "manual_ui"
+            auto_ui_dir = GENERATED_UI_DIR / "auto_ui"
+            manual_api_dir = GENERATED_API_DIR / "manual_api"
+            auto_api_dir = GENERATED_API_DIR / "auto_api"
+
+            if not any(
+                    d.exists() for d in (manual_ui_dir, auto_ui_dir, manual_api_dir, auto_api_dir)
+            ):
+                st.info(
+                    "Пока нет данных для анализа. "
+                    "Сгенерируйте UI и/или API-тесты на соответствующих вкладках."
+                )
+            else:
+                coverage_analyzer = CoverageAnalyzer()
+                standards_checker = StandardsChecker()
+
+                # --- UI manual ---
+                if manual_ui_dir.exists():
+                    st.markdown("### UI: ручные тест-кейсы (Allure)")
+                    cov_manual = coverage_analyzer.analyze_dir(manual_ui_dir)
+                    std_manual = standards_checker.check_dir(manual_ui_dir)
+
+                    total_manual = sum(e.total_tests for e in cov_manual.entries)
+                    st.metric("Всего ручных UI-тестов", total_manual)
+                    st.caption(
+                        f"Файлов OK: {len(std_manual.ok_files)}, "
+                        f"файлов с проблемами: {len(std_manual.issues)}"
+                    )
+                    if std_manual.issues:
+                        with st.expander("⚠️ Файлы с нарушениями стандартов (UI manual)"):
+                            for issue in std_manual.issues:
+                                st.write(f"**{issue.file}** — {issue.message}")
+
+                # --- UI auto ---
+                if auto_ui_dir.exists():
+                    st.markdown("### UI: автотесты (pytest + Playwright)")
+                    cov_auto = coverage_analyzer.analyze_dir(auto_ui_dir)
+                    std_auto = standards_checker.check_dir(auto_ui_dir)
+
+                    total_auto = sum(e.total_tests for e in cov_auto.entries)
+                    st.metric("Всего UI-автотестов", total_auto)
+                    st.caption(
+                        f"Файлов OK: {len(std_auto.ok_files)}, "
+                        f"файлов с проблемами: {len(std_auto.issues)}"
+                    )
+                    if std_auto.issues:
+                        with st.expander("⚠️ Файлы с нарушениями стандартов (UI auto)"):
+                            for issue in std_auto.issues:
+                                st.write(f"**{issue.file}** — {issue.message}")
+
+                # --- API manual ---
+                if manual_api_dir.exists():
+                    st.markdown("### API: ручные тест-кейсы (Allure)")
+                    cov_api_manual = coverage_analyzer.analyze_dir(manual_api_dir)
+                    std_api_manual = standards_checker.check_dir(manual_api_dir)
+
+                    total_api_manual = sum(e.total_tests for e in cov_api_manual.entries)
+                    st.metric("Всего ручных API-тестов", total_api_manual)
+                    st.caption(
+                        f"Файлов OK: {len(std_api_manual.ok_files)}, "
+                        f"файлов с проблемами: {len(std_api_manual.issues)}"
+                    )
+                    if std_api_manual.issues:
+                        with st.expander("⚠️ Файлы с нарушениями стандартов (API manual)"):
+                            for issue in std_api_manual.issues:
+                                st.write(f"**{issue.file}** — {issue.message}")
+
+                # --- API auto ---
+                if auto_api_dir.exists():
+                    st.markdown("### API: автотесты (pytest)")
+                    cov_api_auto = coverage_analyzer.analyze_dir(auto_api_dir)
+                    std_api_auto = standards_checker.check_dir(auto_api_dir)
+
+                    total_api_auto = sum(e.total_tests for e in cov_api_auto.entries)
+                    st.metric("Всего API-автотестов", total_api_auto)
+                    st.caption(
+                        f"Файлов OK: {len(std_api_auto.ok_files)}, "
+                        f"файлов с проблемами: {len(std_api_auto.issues)}"
+                    )
+                    if std_api_auto.issues:
+                        with st.expander("⚠️ Файлы с нарушениями стандартов (API auto)"):
+                            for issue in std_api_auto.issues:
+                                st.write(f"**{issue.file}** — {issue.message}")
 
 
 if __name__ == "__main__":

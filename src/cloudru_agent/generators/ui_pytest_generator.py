@@ -17,6 +17,8 @@ CALC_URL = "{{ base_url }}"
 @allure.feature("{{ feature }}")
 @allure.story("{{ block_name }}")
 @allure.tag("{{ requirement.priority }}")
+@allure.label("priority", "{{ requirement.priority }}")     
+@allure.title("{{ requirement.title }}")                  
 @allure.label("requirement", "{{ requirement.id }}")
 def test_{{ requirement.id|lower }}(page: Page) -> None:
     with allure.step("Arrange: {{ arrange_step }}"):

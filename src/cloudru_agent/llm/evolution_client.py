@@ -12,7 +12,7 @@ class EvolutionClient:
     Обёртка над Evolution Foundation Models (OpenAI-совместимый API).
 
     Требует:
-    - переменная окружения API_KEY (или CLOUDRU_FM_API_KEY)
+    - переменная окружения API_KEY
     - base_url: https://foundation-models.api.cloud.ru/v1
     """
 
@@ -141,3 +141,63 @@ class EvolutionClient:
             "act": data.get("act", requirement.title),
             "assert": data.get("assert", f"проверить: {requirement.title}"),
         }
+
+    def api_aaa_steps(self, requirement) -> dict:
+        """
+        Генерирует Arrange / Act / Assert для одного API-требования.
+        requirement: ApiRequirement
+        """
+        system_prompt = """
+        Ты опытный QA-инженер по API. 
+        Тебе даётся информация об одном HTTP-эндпоинте Evolution Compute.
+        Нужно придумать понятные пошаговые действия в паттерне AAA.
+
+        Верни JSON вида:
+        {
+        "arrange": "что подготовить перед вызовом",
+        "act": "что именно вызвать",
+        "assert": "что проверить в ответе"
+        }
+
+        Пиши по-русски, в одном-двух предложениях на шаг.""".strip()
+
+        user_prompt = f"""
+        Секция: {requirement.section}
+        Метод: {requirement.method}
+        Путь: {requirement.path}
+        Краткое описание: {requirement.summary}
+        Успешный код ответа: {requirement.success_code}
+        Коды ошибок: {requirement.error_codes}""".strip()
+
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.2,
+            response_format={"type": "json_object"},)
+
+        raw = response.choices[0].message.content
+
+        try:
+            data = json.loads(raw)
+        except Exception:
+            # запасной вариант, если модель вернула невалидный JSON
+            return {
+                "arrange": f"подготовить авторизованный запрос к {requirement.method} {requirement.path}",
+                "act": f"отправить запрос {requirement.method} {requirement.path}",
+                "assert": f"убедиться, что код ответа {requirement.success_code} и тело соответствует спецификации",
+            }
+
+        arrange = data.get("arrange") or f"подготовить авторизованный запрос к {requirement.method} {requirement.path}"
+        act = data.get("act") or f"отправить запрос {requirement.method} {requirement.path}"
+        assert_ = data.get("assert") or f"убедиться, что код ответа {requirement.success_code} и тело соответствует спецификации"
+
+        return {
+            "arrange": arrange,
+            "act": act,
+            "assert": assert_,
+        }
+
+
