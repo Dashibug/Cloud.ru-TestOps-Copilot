@@ -39,16 +39,97 @@ class AgentOrchestrator:
         manual_dir = Path(output_dir) / "manual_ui"
         auto_dir = Path(output_dir) / "auto_ui"
 
+        manual_dir.mkdir(parents=True, exist_ok=True)
+        auto_dir.mkdir(parents=True, exist_ok=True)
+
+        # 1) Генерация ручных кейсов
         self.manual_generator.generate_ui_tests(
             requirements_doc,
             str(manual_dir),
             llm=self.llm,
         )
+
+        # 2) Генерация первых версий автотестов (pytest + Playwright)
         self.ui_auto_generator.generate(
             requirements_doc,
             str(auto_dir),
             llm=self.llm,
         )
+
+        # 3) Проход ревизора + авто-фиксер поверх сгенерированных автотестов
+        self._review_and_refine_ui_autotests(requirements_doc, auto_dir)
+
+    def _review_and_refine_ui_autotests(self, requirements_doc, auto_dir: Path) -> None:
+        """
+        Прогоняет сгенерированные UI-автотесты через ревизора и авто-фиксер.
+
+        Ожидается, что UiPytestGenerator создаёт файлы в формате:
+        test_ui_<req.id.lower()>.py
+
+        Пример:
+            req.id = "REQ_MAIN_PAGE_DISPLAY"
+            -> файл: test_ui_req_main_page_display.py
+        """
+        for req in requirements_doc.requirements:
+            # Правило ИМЕНИ ФАЙЛА должно совпадать с генератором UiPytestGenerator
+            file_name = f"test_ui_{req.id.lower()}.py"
+            test_path = auto_dir / file_name
+
+            if not test_path.exists():
+                # если по какой-то причине файл не найден — просто пропускаем
+                continue
+
+            raw_code = test_path.read_text(encoding="utf-8")
+
+            has_fixme = "FIXME" in raw_code or "pass  # FIXME" in raw_code
+
+            if has_fixme:
+                # если есть заглушки — считаем тест заведомо плохим, не спрашивая ревизора
+                review = {
+                    "ok": False,
+                    "problems": [
+                        "В тесте остались заглушки FIXME / pass — автогенерация не смогла построить шаги Act/Assert, тест неполный."
+                    ],
+                }
+            else:
+                # обычный путь: спрашиваем ревизора-модель
+                try:
+                    review = self.llm.review_ui_test(req.title, raw_code)
+                except Exception:
+                    # если что-то упало — пропускаем авто-фикс, но тест уже без фиксми
+                    continue
+
+            if review.get("ok", True):
+                # ревизор (или наша проверка) считает тест нормальным
+                continue
+
+                # дальше идёт твой текущий авто-фикс:
+            try:
+                improved_code = self.llm.refine_ui_test_with_feedback(
+                    feature=requirements_doc.feature,
+                    requirement=req,
+                    old_code=raw_code,
+                    review=review,
+                )
+            except Exception:
+                continue
+
+            if not improved_code or not improved_code.strip():
+                continue
+
+            problems = review.get("problems") or []
+            if problems:
+                problems_comment = "\n".join(f"# - {p}" for p in problems)
+                header = (
+                    "# REVIEW AUTO-FIX: тест автоматически переписан по замечаниям ревизора\n"
+                    "# Найденные проблемы:\n"
+                    f"{problems_comment}\n\n"
+                )
+            else:
+                header = "# REVIEW AUTO-FIX: тест автоматически улучшен ревизором\n\n"
+
+            final_code = header + improved_code.lstrip()
+            test_path.write_text(final_code, encoding="utf-8")
 
     def generate_ui_manual_tests(self, requirements_path: str, output_dir: str) -> None:
         doc = self.ui_parser.parse(Path(requirements_path))
@@ -90,6 +171,9 @@ class AgentOrchestrator:
         manual_dir = Path(output_dir) / "manual_api"
         auto_dir = Path(output_dir) / "auto_api"
 
+        manual_dir.mkdir(parents=True, exist_ok=True)
+        auto_dir.mkdir(parents=True, exist_ok=True)
+
         self.manual_generator.generate_api_tests(doc, str(manual_dir), llm=self.llm)
         self.api_auto_generator.generate_api_tests(doc, str(auto_dir), llm=self.llm)
 
@@ -105,6 +189,9 @@ class AgentOrchestrator:
 
         manual_dir = Path(output_dir) / "manual_api"
         auto_dir = Path(output_dir) / "auto_api"
+
+        manual_dir.mkdir(parents=True, exist_ok=True)
+        auto_dir.mkdir(parents=True, exist_ok=True)
 
         self.manual_generator.generate_api_tests(doc, str(manual_dir), llm=self.llm)
         self.api_auto_generator.generate_api_tests(doc, str(auto_dir), llm=self.llm)
