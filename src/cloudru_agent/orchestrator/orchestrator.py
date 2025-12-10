@@ -103,7 +103,7 @@ class AgentOrchestrator:
                 # ревизор (или наша проверка) считает тест нормальным
                 continue
 
-                # дальше идёт твой текущий авто-фикс:
+            # авто-фикс поверх проблемного теста
             try:
                 improved_code = self.llm.refine_ui_test_with_feedback(
                     feature=requirements_doc.feature,
@@ -137,7 +137,10 @@ class AgentOrchestrator:
 
     def generate_ui_automation(self, requirements_path: str, output_dir: str) -> None:
         doc = self.ui_parser.parse(Path(requirements_path))
-        self.ui_auto_generator.generate(doc, output_dir, llm=self.llm)
+        out_dir = Path(output_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        self.ui_auto_generator.generate(doc, str(out_dir), llm=self.llm)
+        self._review_and_refine_ui_autotests(doc, out_dir)
 
     # =====================================================================
     # API (OpenAPI v3)
@@ -155,7 +158,10 @@ class AgentOrchestrator:
         CLI / утилита: pytest API-тесты из OpenAPI-файла.
         """
         doc = self.openapi_parser.parse_file(openapi_path)
-        self.api_auto_generator.generate_api_tests(doc, output_dir, llm=self.llm)
+        out_dir = Path(output_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        self.api_auto_generator.generate_api_tests(doc, str(out_dir), llm=self.llm)
+        self._review_and_refine_api_autotests(doc, out_dir)
 
     def generate_api_from_openapi_text(
         self,
@@ -177,6 +183,9 @@ class AgentOrchestrator:
         self.manual_generator.generate_api_tests(doc, str(manual_dir), llm=self.llm)
         self.api_auto_generator.generate_api_tests(doc, str(auto_dir), llm=self.llm)
 
+        # ревью + авто-фикс для API
+        self._review_and_refine_api_autotests(doc, auto_dir)
+
     def generate_api_from_openapi_file(
         self,
         openapi_path: str,
@@ -195,6 +204,72 @@ class AgentOrchestrator:
 
         self.manual_generator.generate_api_tests(doc, str(manual_dir), llm=self.llm)
         self.api_auto_generator.generate_api_tests(doc, str(auto_dir), llm=self.llm)
+
+        # ревью + авто-фикс для API
+        self._review_and_refine_api_autotests(doc, auto_dir)
+
+    def _review_and_refine_api_autotests(self, requirements_doc, auto_dir: Path) -> None:
+        """
+        Прогоняет сгенерированные API-автотесты через ревизора и авто-фиксер.
+
+        Файлы генерируются ApiPytestGenerator в формате:
+            test_<req.id.lower()>.py
+        """
+        for req in requirements_doc.requirements:
+            file_name = f"test_{req.id.lower()}.py"
+            test_path = auto_dir / file_name
+
+            if not test_path.exists():
+                continue
+
+            raw_code = test_path.read_text(encoding="utf-8")
+
+            # считаем тест автоматически плохим, если есть:
+            has_todo = "TODO" in raw_code or "pass" in raw_code
+
+            if has_todo:
+                review = {
+                    "ok": False,
+                    "problems": [
+                        "В тесте остались заглушки TODO / pass — автогенерация не дописала шаги или проверки, тест неполный."
+                    ],
+                }
+            else:
+                try:
+                    review = self.llm.review_api_test(req, raw_code)
+                except Exception:
+                    # если ревизор упал — не ломаем пайплайн
+                    continue
+
+            if review.get("ok", True):
+                continue
+
+            try:
+                improved_code = self.llm.refine_api_test_with_feedback(
+                    requirement=req,
+                    old_code=raw_code,
+                    review=review,
+                    base_url=requirements_doc.base_url,
+                )
+            except Exception:
+                continue
+
+            if not improved_code or not improved_code.strip():
+                continue
+
+            problems = review.get("problems") or []
+            if problems:
+                problems_comment = "\n".join(f"# - {p}" for p in problems)
+                header = (
+                    "# REVIEW AUTO-FIX: API-тест автоматически переписан по замечаниям ревизора\n"
+                    "# Найденные проблемы:\n"
+                    f"{problems_comment}\n\n"
+                )
+            else:
+                header = "# REVIEW AUTO-FIX: API-тест автоматически улучшен ревизором\n\n"
+
+            final_code = header + improved_code.lstrip()
+            test_path.write_text(final_code, encoding="utf-8")
 
     # =====================================================================
     # Аналитика
