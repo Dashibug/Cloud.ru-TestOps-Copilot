@@ -270,6 +270,10 @@ def inject_cloudru_css() -> None:
         margin-top: 0.2rem;
         margin-bottom: 0.9rem;
         }
+        
+        .stTabs [data-baseweb="tab-highlight"] {
+        background-color: transparent !important;
+        }
         </style>
         """,
         unsafe_allow_html=True,
