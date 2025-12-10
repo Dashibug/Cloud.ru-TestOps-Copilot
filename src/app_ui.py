@@ -35,59 +35,248 @@ def inject_cloudru_css() -> None:
     st.markdown(
         """
         <style>
-        /* фон и отступы страницы */
-        .main {
-            padding-top: 0.5rem;
+        /* убрать стандартный верхний хедер Streamlit */
+        header[data-testid="stHeader"] {
+        display: none;
         }
 
-        /* кастомная шапка */
+        /* на всякий случай уберём ещё меню и футер Streamlit */
+        #MainMenu { visibility: hidden; }
+        footer { visibility: hidden; }
+        :root {
+            --cloud-bg: #F3F6FB;
+            --cloud-surface: #FFFFFF;
+            --cloud-surface-soft: #F9FAFB;
+            --cloud-border-subtle: #E2E8F0;
+            --cloud-border-strong: #CBD5E1;
+            --cloud-brand: #00A060;
+            --cloud-brand-strong: #009256;
+            --cloud-brand-soft: #E6F6EF;
+            --cloud-text-main: #051723;
+            --cloud-text-muted: #6B7280;
+            --cloud-radius-lg: 16px;
+            --cloud-radius-xl: 24px;
+        }
+
+        /* фон + базовая типографика */
+        .stApp {
+            background:
+                radial-gradient(circle at 0 0, rgba(16,185,129,0.12), transparent 55%),
+                radial-gradient(circle at 100% 0, rgba(59,130,246,0.09), transparent 55%),
+                var(--cloud-bg);
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text",
+                         "Segoe UI", system-ui, sans-serif;
+            color: var(--cloud-text-main);
+        }
+
+        .block-container {
+            max-width: 1200px;
+            padding-top: 1.3rem;
+            padding-bottom: 3rem;
+        }
+
+        /* шапка */
         .cloud-header {
+            position: relative;
+            padding: 1rem 1.3rem 1.1rem;
+            margin-bottom: 1.4rem;
+            border-radius: var(--cloud-radius-xl);
+            background: linear-gradient(135deg, #FFFFFF 0%, #F3F6FB 100%);
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            box-shadow: 0 18px 45px rgba(15, 23, 42, 0.16);
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            padding: 0.75rem 0 1rem 0;
+            justify-content: space-between;
+            gap: 1.5rem;
         }
+
+        .cloud-header-left {
+            display: flex;
+            align-items: center;
+            gap: 0.9rem;
+        }
+
+        .cloud-logo-circle {
+            width: 40px;
+            height: 40px;
+            border-radius: 999px;
+            background: radial-gradient(circle at 25% 0, #FFFFFF 0%, #00B368 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4rem;
+            box-shadow: 0 12px 30px rgba(5, 150, 105, 0.45);
+        }
+
+        .cloud-brand-block {
+            display: flex;
+            flex-direction: column;
+            gap: 0.1rem;
+        }
+
+        .cloud-badge {
+            align-self: flex-start;
+            padding: 0.1rem 0.65rem;
+            border-radius: 999px;
+            font-size: 0.7rem;
+            letter-spacing: 0.09em;
+            text-transform: uppercase;
+            background: var(--cloud-brand-soft);
+            color: var(--cloud-brand);
+            font-weight: 600;
+        }
+
         .cloud-title {
-            font-size: 1.6rem;
+            font-size: 1.5rem;
             font-weight: 700;
-            color: #00BF6F; /* фирменный зелёный Cloud.ru */
+            color: var(--cloud-text-main);
         }
+
         .cloud-subtitle {
             font-size: 0.9rem;
-            color: #6B6B6B;
+            color: var(--cloud-text-muted);
         }
-        .cloud-badge {
-            padding: 0.25rem 0.9rem;
+
+        .cloud-header-right {
+            font-size: 0.82rem;
+            color: var(--cloud-text-muted);
+            text-align: right;
+        }
+
+        .cloud-header-right strong {
+            color: var(--cloud-brand);
+        }
+
+        /* вкладки */
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 0.6rem;
+            padding-bottom: 0.35rem;
+            border-bottom: 1px solid var(--cloud-border-subtle);
+        }
+        .stTabs [data-baseweb="tab"] {
             border-radius: 999px;
-            background-color: #E5F8F0;
-            color: #008F54;
-            font-size: 0.8rem;
+            padding: 0.35rem 1.2rem;
+            font-size: 0.93rem;
+            color: var(--cloud-text-muted);
+            background: transparent;
+            border: 1px solid transparent;
+            box-shadow: none;
+        }
+        .stTabs [data-baseweb="tab"]:hover {
+            background: rgba(255, 255, 255, 0.7);
+        }
+        .stTabs [data-baseweb="tab"][aria-selected="true"] {
+            background: #FFFFFF;
+            color: var(--cloud-brand);
             font-weight: 600;
-            white-space: nowrap;
+            border-color: rgba(34, 197, 94, 0.55);
+            box-shadow: 0 8px 22px rgba(15, 23, 42, 0.18);
+        }
+
+        /* карточки- панели */
+        .cloud-card {
+            background: var(--cloud-surface);
+            border-radius: var(--cloud-radius-lg);
+            padding: 1.15rem 1.25rem 1.25rem;
+            border: 1px solid rgba(148, 163, 184, 0.32);
+            box-shadow: 0 16px 30px rgba(15, 23, 42, 0.07);
+        }
+
+        .cloud-card h3, .cloud-card h2, .cloud-card h4 {
+            margin-top: 0.1rem;
+            margin-bottom: 0.6rem;
+            font-weight: 600;
+            color: var(--cloud-text-main);
+        }
+
+        .cloud-card .small-description {
+            font-size: 0.85rem;
+            color: var(--cloud-text-muted);
+            margin-bottom: 0.75rem;
+        }
+
+        /* загрузчик файлов */
+        [data-testid="stFileUploaderDropzone"] {
+            border-radius: 0.9rem;
+            background: var(--cloud-surface-soft);
+            border: 1px dashed var(--cloud-border-strong);
+        }
+
+        [data-testid="stFileUploaderDropzone"] > div {
+            color: var(--cloud-text-muted);
+        }
+
+        /* textarea и text input */
+        textarea, .stTextInput>div>div>input {
+            border-radius: 0.9rem !important;
+            border: 1px solid var(--cloud-border-subtle);
+            background: var(--cloud-surface-soft);
+        }
+
+        textarea:focus-visible,
+        .stTextInput>div>div>input:focus-visible {
+            outline: 2px solid rgba(34, 197, 94, 0.65) !important;
+            outline-offset: 1px;
         }
 
         /* кнопки */
         .stButton>button {
             border-radius: 999px;
             border: none;
-            background: linear-gradient(90deg, #00BF6F, #00D694);
-            color: white;
+            background: linear-gradient(120deg, #00B368, #22C55E);
+            color: #FFFFFF;
             font-weight: 600;
-            padding: 0.45rem 1.4rem;
+            font-size: 0.92rem;
+            padding: 0.42rem 1.45rem;
+            box-shadow: 0 12px 22px rgba(16, 185, 129, 0.45);
+            transition: transform 80ms ease-out, box-shadow 80ms ease-out, filter 80ms ease-out;
+        }
+        .stButton>button:hover {
+            filter: brightness(1.04);
+            transform: translateY(-0.5px);
+            box-shadow: 0 14px 30px rgba(16, 185, 129, 0.55);
         }
 
-        /* вкладки */
-        .stTabs [data-baseweb="tab-list"] {
-            gap: 0.25rem;
+        /* алерты / инфо-боксы */
+        [data-testid="stAlert"] {
+            border-radius: 0.9rem;
+            border: 1px solid #BFDBFE;
+            background: #EFF6FF;
         }
-        .stTabs [data-baseweb="tab"] {
-            border-radius: 999px;
-            padding: 0.25rem 0.75rem;
+
+        /* code / экспандеры */
+        pre, code {
+            border-radius: 0.7rem !important;
+        }
+
+        .st-expander {
+            border-radius: 0.8rem;
+            border: 1px solid var(--cloud-border-subtle);
+            background: var(--cloud-surface-soft);
+        }
+
+        /* метрики в аналитике */
+        [data-testid="stMetricValue"] {
+            font-weight: 700;
+        }
+        [data-testid="stMetricLabel"] {
+            color: var(--cloud-text-muted);
+        }
+        
+        .block-container h2,
+        .block-container h3 {
+        font-size: 1.35rem !important;   /* было больше, теперь чуть спокойнее */
+        line-height: 1.25;
+        margin-top: 0.2rem;
+        margin-bottom: 0.9rem;
         }
         </style>
         """,
         unsafe_allow_html=True,
     )
+
+
+
 
 
 def main() -> None:
@@ -106,16 +295,24 @@ def main() -> None:
     inject_cloudru_css()
 
     # --- шапка ---
+
     st.markdown(
         """
         <div class="cloud-header">
-          <div>
-            <div class="cloud-title">Cloud.ru TestOps Copilot</div>
-            <div class="cloud-subtitle">
-              Генерация тест-кейсов и автотестов на базе Evolution Foundation Model
+          <div class="cloud-header-left">
+            <div class="cloud-logo-circle">☁️</div>
+            <div class="cloud-brand-block">
+              <div class="cloud-badge">Cloud.ru</div>
+              <div class="cloud-title">TestOps Copilot</div>
+              <div class="cloud-subtitle">
+                ИИ-ассистент для генерации тест-кейсов и автотестов на базе Evolution Foundation Model
+              </div>
             </div>
           </div>
-          <div class="cloud-badge">Hackathon · Evolution FM</div>
+          <div class="cloud-header-right">
+            <div>Ускоряет подготовку UI и API-тестов</div>
+            <div><strong>Меньше рутины</strong> для QA-команд</div>
+          </div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -123,23 +320,18 @@ def main() -> None:
 
     # --- верхний уровень: два кейса ---
     ui_tab, api_tab, analytics_tab = st.tabs(
-        ["UI калькулятор цен", "API Evolution Compute (v3)", "Аналитика"]
+        ["UI-требования", "API-спецификация", "Аналитика"]
     )
 
     # =====================================================================
-    # ТАБ 1. UI калькулятор
+    # ТАБ 1. UI требования
     # =====================================================================
     with ui_tab:
         left, right = st.columns([1, 1])
 
         # левая колонка — требования
         with left:
-            st.subheader("1. Описание пользовательского сценария")
-
-            st.caption(
-                "Вставьте текст требований к Cloud.ru Price Calculator "
-                "или загрузите файл с описанием сценариев."
-            )
+            st.subheader("Описание пользовательского сценария")
 
             uploaded = st.file_uploader(
                 "Загрузите файл с требованиями (md / txt) или введите текст ниже",
@@ -150,7 +342,7 @@ def main() -> None:
                 ui_text = uploaded.read().decode("utf-8")
             else:
                 ui_text = st.text_area(
-                    "Текст требований для UI калькулятора",
+                    "Текст UI-требований",
                     value=load_default_ui_requirements(),
                     height=400,
                 )
@@ -169,7 +361,7 @@ def main() -> None:
 
         # правая колонка — артефакты
         with right:
-            st.subheader("2. Сгенерированные артефакты для UI")
+            st.subheader("Сгенерированные артефакты для UI")
 
             if generate_ui_button:
                 if not ui_text.strip():
@@ -226,19 +418,15 @@ def main() -> None:
         left, right = st.columns([1, 1])
 
         with left:
-            st.subheader("1. OpenAPI-спецификация Evolution Compute v3")
-            st.caption(
-                "Загрузите OpenAPI 3.0 (yaml/json) для разделов VMs, Disks, Flavors "
-                "или вставьте текст спецификации."
-            )
+            st.subheader("OpenAPI-спецификация")
 
             openapi_file = st.file_uploader(
-                "Загрузите OpenAPI 3.0 спецификацию (yaml/json)",
+                "Загрузите OpenAPI спецификацию (yaml/json)",
                 type=["yaml", "yml", "json", "txt"],
                 key="openapi_uploader",
             )
             openapi_text_area = st.text_area(
-                "Или вставьте сюда содержимое OpenAPI",
+                "Или вставьте сюда содержимое файла OpenAPI",
                 height=300,
                 key="openapi_text",
             )
@@ -276,7 +464,7 @@ def main() -> None:
                 st.success("Результаты по API очищены.")
 
         with right:
-            st.subheader("2. Сгенерированные артефакты для API")
+            st.subheader("Сгенерированные артефакты для API")
 
             manual_api_dir = GENERATED_API_DIR / "manual_api"
             auto_api_dir = GENERATED_API_DIR / "auto_api"
