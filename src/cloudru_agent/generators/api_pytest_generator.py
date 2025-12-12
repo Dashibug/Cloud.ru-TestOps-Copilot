@@ -16,7 +16,8 @@ import requests
 
 BASE_URL = "{{ base_url }}"
 
-
+@allure.title("{{ requirement.summary }}")
+@allure.label("priority", "{{ requirement.priority }}")
 @allure.feature("{{ feature }}")
 @allure.story("{{ requirement.section }}")
 @allure.tag("{{ requirement.priority }}")

@@ -37,7 +37,11 @@ class StandardsChecker:
             text = file.read_text(encoding="utf-8")
 
             has_title = "@allure.title" in text
-            has_priority = 'label("priority"' in text or "label('priority'" in text
+            has_priority = (
+                    'label("priority"' in text
+                    or "label('priority'" in text
+                    or "@allure.tag(" in text
+            )
             has_arrange = "Arrange:" in text
             has_act = "Act:" in text
             has_assert = "Assert:" in text
