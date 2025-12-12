@@ -324,39 +324,70 @@ class EvolutionClient:
         Генерирует реальные шаги Playwright для UI-теста.
         Возвращает dict с ключами: arrange, act, assert — списки строк Python-кода.
         """
-        system_prompt = '''
-        Ты Senior QA automation engineer. 
-        Твоя задача — сгенерировать минимальный, но рабочий фрагмент автотеста на Python + Playwright (sync API).
+        system_prompt = """
+    Ты Senior QA automation engineer.
+    Нужно сгенерировать МИНИМАЛЬНЫЙ, но РАБОЧИЙ фрагмент автотеста на Python + Playwright (sync).
 
-        Контекст:
-        - В тесте уже импортировано: 
-          from playwright.sync_api import Page, expect
-        - В сигнатуре теста есть параметр page: Page.
-        - В модуле объявлена константа CALC_URL — базовый URL продукта.
-        - Allure-steps уже обёрнуты вокруг кода, поэтому их писать не нужно.
+    Контекст:
+    - В тесте уже импортировано: from playwright.sync_api import Page, expect
+    - В сигнатуре теста есть параметр page: Page
+    - В модуле объявлена константа CALC_URL — базовый URL продукта
+    - Allure steps уже оборачивают код, поэтому их писать не нужно
 
-        Требования к ответу:
-        - Верни JSON-объект с ключами "arrange", "act", "assert".
-        - Каждое значение — список строк Python-кода (без отступов, без with, без объявления функции).
-        - В блоке arrange ОБЯЗАТЕЛЬНО должен быть вызов page.goto(CALC_URL).
-        - В act опиши действия пользователя (поиск элементов, клики, ввод текста и т.п.).
-        - В assert добавь реальные проверки через expect или assert.
-        - Если в тексте требования явно упоминаются атрибуты data-testid (например, data-testid="add-to-cart"),
-          приоритетно используй локаторы по ним:
-          page.get_by_test_id("add-to-cart") или page.locator("[data-testid=\\"add-to-cart\\"]").
-        - Если data-testid нет, используй text/role-селекторы Playwright (get_by_role, get_by_text и т.п.).
-        - Не используй '...', 'pass' и комментарии TODO.
-        '''.strip()
+    Формат ответа:
+    - Верни СТРОГО JSON-объект с ключами: "arrange", "act", "assert"
+    - Значения — списки строк Python-кода (БЕЗ отступов, БЕЗ with/def/import/декораторов)
+    - Нельзя использовать: '...', 'pass', TODO, комментарии-заглушки
 
-        user_prompt = f""" 
-        Фича/продукт: {feature}
-        Блок/экран: {getattr(requirement, "block", "")}
-        ID требования: {requirement.id}
-        Текст требования: {requirement.title}
-        Приоритет: {getattr(requirement, "priority", "")}
+    Обязательные требования к тесту:
+    1) Arrange:
+    - ОБЯЗАТЕЛЬНО: page.goto(CALC_URL)
+    - ОБЯЗАТЕЛЬНО: дождись загрузки: page.wait_for_load_state("domcontentloaded")
+    - Если возможно — добавь мягкую стабилизацию:
+      page.wait_for_timeout(300)  # только один раз и только коротко
+    - Попробуй закрыть типовые баннеры/куки (если они есть), но НЕ фейли тест, если их нет:
+      try:
+          page.get_by_role("button", name=<варианты>).click()
+      except Exception:
+          pass
 
-        Сгенерируй Python-код для этого требования.
-        """.strip()
+    2) Локаторы (важно для “всех видов кнопок”):
+    - Если в требовании есть data-testid — используй в приоритете:
+      page.get_by_test_id("...") ИЛИ page.locator('[data-testid="..."]')
+    - Если data-testid нет:
+      - Для "кнопок" используй устойчивый fallback, потому что кнопка может быть <a>, <div role="button"> и т.п.
+      - Делай locator через комбинированный CSS или через role+link:
+        Пример хорошего универсального локатора:
+          locator = page.locator('button:has-text("TEXT"), a:has-text("TEXT"), [role="button"]:has-text("TEXT")')
+      - Если есть явное имя на кнопке — используй его (TEXT)
+
+    3) Семантика требований:
+    - Если требование про "отображается/видна/присутствует" → assert должен содержать expect(...).to_be_visible()
+    - Если требование про "кликабельна/нажимается/по нажатию" → ОБЯЗАТЕЛЬНО:
+      - в Act: выполнить click()
+      - в Assert: проверить РЕАКЦИЮ на клик, а не только visible/enabled
+        Под “реакцией” подходит хотя бы одно:
+        - изменился URL (expect(page).to_have_url(...))
+        - открылся видимый блок/модалка/панель/карта/результаты (expect(что-то новое).to_be_visible())
+        - изменилось состояние элемента (aria-expanded/aria-pressed и т.п.) через expect(locator).to_have_attribute(...)
+      - Дополнительно можно оставить expect(locator).to_be_enabled(), но этого недостаточно
+
+    4) Не усложняй:
+    - Делай 1-3 действия максимум
+    - Делай 1-3 ключевых assert максимум
+    """.strip()
+
+        # добавим requirement.description в промпт - иначе модель часто не знает, что именно проверять после клика
+        user_prompt = f"""
+    Фича/продукт: {feature}
+    Блок/экран: {getattr(requirement, "block", "")}
+    ID требования: {requirement.id}
+    Название требования: {requirement.title}
+    Описание требования: {getattr(requirement, "description", "")}
+    Приоритет: {getattr(requirement, "priority", "")}
+
+    Сгенерируй код шагов arrange/act/assert для Playwright под это требование.
+    """.strip()
 
         response = self.client.chat.completions.create(
             model=self.gen_model,
@@ -369,14 +400,10 @@ class EvolutionClient:
         )
         content = response.choices[0].message.content
         try:
-            data = json.loads(content)
+            return json.loads(content)
         except Exception:
-            data = {"arrange": [], "act": [], "assert": []}
-        return data
-
-    # =========================
-    # РЕВЬЮ + ФИКС ДЛЯ UI
-    # =========================
+            return {"arrange": ["page.goto(CALC_URL)", 'page.wait_for_load_state("domcontentloaded")'], "act": [],
+                    "assert": []}
 
     def review_ui_test(self, requirement_title: str, test_code: str) -> dict:
         """
@@ -384,30 +411,33 @@ class EvolutionClient:
         Возвращает JSON: {"ok": bool, "problems": [...]}.
         """
         system_prompt = """
-        Ты выступаешь как ревизор автотестов (senior QA lead).
-        Твоя задача — по требованию и коду теста на Python + Playwright оценить,
-        насколько тест действительно проверяет это требование.
+    Ты выступаешь как ревизор автотестов (senior QA lead).
+    По требованию и коду теста на Python + Playwright оцени, действительно ли тест проверяет требование.
 
-        Обрати внимание на:
-        - есть ли переход на нужный экран (Arrange),
-        - есть ли ключевые действия пользователя (Act),
-        - есть ли проверки по сути требования (Assert),
-        - не отсутствуют ли вообще проверки (expect/assert).
+    Проверяй обязательно:
+    - Arrange: есть ли переход на нужный экран (page.goto(CALC_URL)) и ожидание загрузки
+    - Act: есть ли реальное действие пользователя, если требование про взаимодействие
+    - Assert: есть ли проверки expect/assert по сути требования
 
-        Ответ верни строго в JSON-формате:
-        {
-        "ok": true/false,
-        "problems": ["краткое описание проблемы", ...]
-        }""".strip()
+    Спец-правило для "кликабельна/нажимается/по нажатию":
+    - В Act ОБЯЗАТЕЛЕН вызов click() по целевому элементу
+    - В Assert ОБЯЗАТЕЛЬНА проверка РЕАКЦИИ на клик (URL change / открытие панели/модалки/результатов / смена состояния),
+      проверки visible/enabled сами по себе НЕ считаются достаточными.
+
+    Ответ верни строго JSON:
+    {
+      "ok": true/false,
+      "problems": ["...", "..."]
+    }
+    """.strip()
 
         user_prompt = f"""Требование:
-{requirement_title}
+    {requirement_title}
 
-Код теста:
-```python
-{test_code}
-```"""
-
+    Код теста:
+    ```python
+    {test_code}
+    ```"""
         response = self.client.chat.completions.create(
             model=self.review_model,
             temperature=0,
@@ -419,43 +449,47 @@ class EvolutionClient:
         )
         content = response.choices[0].message.content
         try:
-            data = json.loads(content)
+            return json.loads(content)
         except Exception:
-            data = {"ok": True, "problems": []}
-        return data
+            return {"ok": True, "problems": []}
 
     def refine_ui_test_with_feedback(
-        self,
-        feature: str,
-        requirement: UiRequirement,
-        old_code: str,
-        review: dict,
+            self,
+            feature: str,
+            requirement: UiRequirement,
+            old_code: str,
+            review: dict,
     ) -> str:
         """
         Улучшает автотест на основе фидбэка ревизора.
-        На вход: фича, требование, старый код, JSON-ответ ревизора.
-        На выход: полностью улушенный тестовый код (Python + Playwright).
+        Возвращает полностью улучшенный тестовый код (Python + Playwright).
         """
-
         problems = review.get("problems") or []
-        problems_text = "\n".join(f"- {p}" for p in problems) or "нет явных проблем, но сделай тест чуть лучше"
+        problems_text = "\n".join(f"- {p}" for p in problems) or "сделай тест лучше и стабильнее"
 
         system_prompt = """
         Ты Senior QA automation engineer.
-
         Тебе передают:
-        - формулировку требования к UI (на русском),
+        - требование к UI,
         - старый автотест на Python + Playwright,
-        - список проблем от ревьюера (QA lead).
+        - проблемы от ревьюера.
 
         Твоя задача — ПЕРЕПИСАТЬ тест так, чтобы:
-        - все замечания ревьюера были исправлены;
-        - сохранялась структура Arrange / Act / Assert с контекстом allure.step;
-        - использовались те же импорты и константа CALC_URL;
-        - не было '...', 'pass', TODO и лишних комментариев.
+        - все замечания исправлены;
+        - структура Arrange / Act / Assert с allure.step СОХРАНЕНА;
+        - используются те же импорты и константа CALC_URL;
+        - НЕТ '...', 'pass', TODO, лишних комментариев;
+        - Arrange: обязательно page.goto(CALC_URL) + ожидание загрузки (wait_for_load_state);
+        - Для кнопок используй устойчивые локаторы:
+        * приоритет data-testid
+        * иначе fallback: button/link/[role="button"] через locator('button:has-text("..."), a:has-text("..."), [role="button"]:has-text("...")')
+        - Для требований "кликабельна/по нажатию":
+        * Act: обязательно click()
+        * Assert: обязательно проверка реакции (URL / новый блок / состояние), а не только visible/enabled
+        - По возможности добавь мягкое закрытие cookie/баннеров в Arrange (try/except), без фейла, если баннера нет.
 
         Важно:
-        - Не пиши markdown, не оборачивай код в ```python.
+        - Не пиши markdown. Не оборачивай код в ```python.
         - Верни ТОЛЬКО готовый код теста на Python.
         """.strip()
 
@@ -470,7 +504,6 @@ class EvolutionClient:
         ```python
         {old_code}
         ```
-
         Проблемы от ревьюера:
         {problems_text}
 

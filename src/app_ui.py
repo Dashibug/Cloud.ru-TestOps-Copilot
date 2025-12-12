@@ -1,7 +1,7 @@
 import sys
 from pathlib import Path
 import shutil
-
+import pandas as pd
 import streamlit as st
 
 # --- пути к проекту и примерам ---
@@ -690,6 +690,13 @@ def main() -> None:
         if auto_ui_dir.exists():
             checker = UiLocatorsChecker(base_url=ui_base_url)
             loc_report = checker.analyze_dir(auto_ui_dir)
+            if loc_report.issues:
+                df = pd.DataFrame([{
+                    "file": i.file,
+                    "message": i.message,
+                    "selector": i.selector
+                } for i in loc_report.issues])
+                st.dataframe(df, use_container_width=True, hide_index=True)
             ui_loc_ok = len(loc_report.ok_files)
             ui_loc_bad_files = len({i.file for i in loc_report.issues})
             ui_loc_total_files = ui_loc_ok + ui_loc_bad_files
