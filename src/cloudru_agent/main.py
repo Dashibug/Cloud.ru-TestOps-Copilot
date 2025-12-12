@@ -10,7 +10,7 @@ load_dotenv()
 def generate_ui_manual(requirements_path: str, output_dir: str = "generated/manual_ui"):
     """
     Сгенерировать ручные тест-кейсы (Allure TestOps as Code)
-    для UI калькулятора из текстового файла с требованиями.
+    для UI из текстового файла с требованиями.
     """
     orchestrator = AgentOrchestrator()
     orchestrator.generate_ui_manual_tests(requirements_path, output_dir)
@@ -46,7 +46,7 @@ def generate_api_auto(openapi_path: str, output_dir: str = "generated/auto_api")
 @app.command()
 def analyze_tests(tests_dir: str):
     """
-    Анализ покрытия, дублей и стандартов для уже сгенерированных тестов.
+    Анализ покрытия и стандартов для уже сгенерированных тестов.
     """
     orchestrator = AgentOrchestrator()
     orchestrator.analyze_tests(tests_dir)

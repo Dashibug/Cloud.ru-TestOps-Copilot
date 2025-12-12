@@ -1,0 +1,24 @@
+# Основное приложение
+streamlit
+python-dotenv
+requests
+pydantic
+openai
+
+# Работа с файлами и данными
+pandas
+PyYAML
+
+# Тестирование и генерация тестов
+pytest
+playwright
+allure-pytest
+jinja2  # шаблоны для генерации кода
+
+# Аналитика / визуализация
+matplotlib
+plotly
+
+# Вспомогательное
+tqdm
+loguru
