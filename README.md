@@ -1,4 +1,4 @@
-#☁️  Cloud.ru TestOps Copilot
+# ☁️  Cloud.ru TestOps Copilot
 
 ### Генерация ручных тест-кейсов, UI- и API-автотестов с использованием Evolution Foundation Models
 
