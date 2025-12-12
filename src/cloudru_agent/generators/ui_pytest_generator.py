@@ -17,6 +17,7 @@ CALC_URL = "{{ base_url }}"
 
 @allure.feature("{{ feature }}")
 @allure.story("{{ block_name }}")
+@allure.title({{ title_literal }})
 @allure.tag("{{ requirement.priority }}")
 @allure.label("priority", "{{ requirement.priority }}")
 @allure.label("requirement", "{{ requirement.id }}")
@@ -54,7 +55,7 @@ class UiPytestGenerator:
         out.mkdir(parents=True, exist_ok=True)
 
         for req in doc.requirements:
-            # Текстовые описания шагов (AAA) — то, что показывает QA
+            # Текстовые описания шагов (AAA)
             arrange_text = getattr(req, "arrange", None) or "открыть страницу продукта"
             act_text = getattr(req, "act", None) or "выполнить действия пользователя"
             assert_text = getattr(req, "assert_", None) or "проверить ожидаемый результат"
@@ -63,6 +64,7 @@ class UiPytestGenerator:
             arrange_code = "page.goto(CALC_URL)"
             act_code = "pass  # FIXME: добавить шаги взаимодействия с UI"
             assert_code = "pass  # FIXME: добавить проверки"
+            title_literal = repr(req.title or req.id)
 
             # === 1. Генератор: просим Evolution FM сгенерировать код Playwright ===
             if llm is not None:
@@ -84,7 +86,6 @@ class UiPytestGenerator:
                         assert_code = "\n        ".join(assert_lines)
 
                 except Exception:
-                    # На демо лучше не падать из-за LLM: остаемся на дефолтных шагах
                     arrange_code = "page.goto(CALC_URL)"
                     act_code = "pass  # LLM error, требуется доработка шага"
                     assert_code = "pass  # LLM error, требуется доработка проверки"
@@ -95,6 +96,7 @@ class UiPytestGenerator:
                 feature=doc.feature,
                 block_name=req.block,
                 requirement=req,
+                title_literal=title_literal,
                 arrange_text=arrange_text,
                 act_text=act_text,
                 assert_text=assert_text,
@@ -115,7 +117,6 @@ class UiPytestGenerator:
                         comment += "\n"
                         test_code = comment + test_code
                 except Exception:
-                    # если ревизор упал — просто пишем тест как есть
                     pass
 
             file_name = f"test_ui_{req.id.lower()}.py"

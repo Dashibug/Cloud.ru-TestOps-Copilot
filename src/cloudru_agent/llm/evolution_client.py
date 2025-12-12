@@ -40,6 +40,7 @@ class EvolutionClient:
 
         # Модель для генерации (разбор требований, AAA, Playwright/requests-код)
         self.gen_model = gen_model or os.getenv("EVOLUTION_GEN_MODEL")
+
         # Модель для ревью сгенерированного кода
         self.review_model = review_model or os.getenv("EVOLUTION_REVIEW_MODEL")
 
@@ -71,25 +72,30 @@ class EvolutionClient:
     # UI: требования + AAA + Playwright
     # =====================================================================
 
-    def ui_requirements_from_text(self, text: str) -> UiRequirementsDocument:
+    def ui_requirements_from_text(
+        self,
+        text: str,
+        feature: str | None = None,
+    ) -> UiRequirementsDocument:
         """
-        Просит LLM преобразовать свободный текст требований по калькулятору
-        в JSON нужного нам формата, затем собирает UiRequirementsDocument.
+        Из свободного текста требований по любому UI-продукту
+        строит UiRequirementsDocument.
         """
+        feature_name = feature or "UI продукта"
 
         system_prompt = (
             "Ты опытный QA-лид. Твоя задача — из текста требований по UI "
-            "калькулятора цен Cloud.ru выделить атомарные требования и вернуть "
+            "продукта выделить атомарные требования и вернуть "
             "СТРОГО валидный JSON без комментариев в формате:\n"
             "{\n"
-            '  \"feature\": \"Cloud.ru Price Calculator\",\n'
-            '  \"requirements\": [\n'
+            f'  "feature": "{feature_name}",\n'
+            '  "requirements": [\n'
             "    {\n"
-            '      \"id\": \"REQ_SOME_ID\",           # SNAKE_CASE, латиница, коротко\n'
-            '      \"block\": \"BLOCK_1_START_PAGE\", # один из блоков: BLOCK_1_START_PAGE, BLOCK_2_CATALOG,\n'
-            '      \"title\": \"Краткое название требования\", \n'
-            '      \"description\": \"Расширенное описание\", \n'
-            '      \"priority\": \"CRITICAL\" | \"NORMAL\" | \"LOW\"\n'
+            '      "id": "REQ_SOME_ID",           # SNAKE_CASE, латиница, коротко\n'
+            '      "block": "BLOCK_1_MAIN",       # логический блок / экран (LATIN_SNAKE_CASE)\n'
+            '      "title": "Краткое название требования",\n'
+            '      "description": "Расширенное описание",\n'
+            '      "priority": "CRITICAL" | "NORMAL" | "LOW"\n'
             "    }\n"
             "  ]\n"
             "}\n"
@@ -97,12 +103,11 @@ class EvolutionClient:
         )
 
         user_prompt = (
-            "Вот текст требований по UI-калькулятору Cloud.ru. "
+            "Вот текст требований по UI. "
             "Разбей его на отдельные требования:\n\n"
             f"{text}"
         )
 
-        # просим модель вернуть json_object
         response = self.client.chat.completions.create(
             model=self.gen_model,
             messages=[
@@ -123,7 +128,7 @@ class EvolutionClient:
         Возвращает словарь: {"arrange": "...", "act": "...", "assert": "..."}.
         """
         system_prompt = (
-            "Ты опытный QA-инженер. Для каждого требования по UI калькулятору "
+            "Ты опытный QA-инженер. Для каждого требования по UI продукта "
             "составляй понятные шаги в паттерне Arrange-Act-Assert. "
             "Отвечай СТРОГО JSON без комментариев вида:\n"
             "{\n"
@@ -154,7 +159,7 @@ class EvolutionClient:
 
         data = json.loads(response.choices[0].message.content or "{}")
         return {
-            "arrange": data.get("arrange", "открыть страницу калькулятора"),
+            "arrange": data.get("arrange", "открыть страницу продукта"),
             "act": data.get("act", requirement.title),
             "assert": data.get("assert", f"проверить: {requirement.title}"),
         }
@@ -319,12 +324,13 @@ class EvolutionClient:
         Генерирует реальные шаги Playwright для UI-теста.
         Возвращает dict с ключами: arrange, act, assert — списки строк Python-кода.
         """
-        system_prompt = """ Ты Senior QA automation engineer. 
+        system_prompt = '''
+        Ты Senior QA automation engineer. 
         Твоя задача — сгенерировать минимальный, но рабочий фрагмент автотеста на Python + Playwright (sync API).
 
         Контекст:
         - В тесте уже импортировано: 
-        from playwright.sync_api import Page, expect
+          from playwright.sync_api import Page, expect
         - В сигнатуре теста есть параметр page: Page.
         - В модуле объявлена константа CALC_URL — базовый URL продукта.
         - Allure-steps уже обёрнуты вокруг кода, поэтому их писать не нужно.
@@ -335,9 +341,12 @@ class EvolutionClient:
         - В блоке arrange ОБЯЗАТЕЛЬНО должен быть вызов page.goto(CALC_URL).
         - В act опиши действия пользователя (поиск элементов, клики, ввод текста и т.п.).
         - В assert добавь реальные проверки через expect или assert.
+        - Если в тексте требования явно упоминаются атрибуты data-testid (например, data-testid="add-to-cart"),
+          приоритетно используй локаторы по ним:
+          page.get_by_test_id("add-to-cart") или page.locator("[data-testid=\\"add-to-cart\\"]").
+        - Если data-testid нет, используй text/role-селекторы Playwright (get_by_role, get_by_text и т.п.).
         - Не используй '...', 'pass' и комментарии TODO.
-        - Используй text/role-селекторы Playwright (get_by_role, get_by_text и т.п.).
-        """.strip()
+        '''.strip()
 
         user_prompt = f""" 
         Фича/продукт: {feature}
@@ -353,15 +362,15 @@ class EvolutionClient:
             model=self.gen_model,
             temperature=0.2,
             response_format={"type": "json_object"},
-            messages=[{"role": "system", "content": system_prompt},
-                      {"role": "user", "content": user_prompt},
-                      ],
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
         )
         content = response.choices[0].message.content
         try:
             data = json.loads(content)
         except Exception:
-            # если модель вернула что-то не JSON — вернем пустые шаги
             data = {"arrange": [], "act": [], "assert": []}
         return data
 
@@ -425,7 +434,7 @@ class EvolutionClient:
         """
         Улучшает автотест на основе фидбэка ревизора.
         На вход: фича, требование, старый код, JSON-ответ ревизора.
-        На выход: полностью переписанный тестовый код (Python + Playwright).
+        На выход: полностью улушенный тестовый код (Python + Playwright).
         """
 
         problems = review.get("problems") or []
@@ -469,7 +478,7 @@ class EvolutionClient:
         """.strip()
 
         response = self.client.chat.completions.create(
-            model=self.gen_model,  # или review_model, если хочешь более умный фикс
+            model=self.gen_model,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},

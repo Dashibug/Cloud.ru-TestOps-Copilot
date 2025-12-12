@@ -23,7 +23,6 @@ class StandardsChecker:
     Очень простой чекер стандартов:
     - проверяет наличие AAA (Arrange / Act / Assert);
     - проверяет наличие @allure.title и приоритета.
-    Этого достаточно, чтобы показать концепцию на хакатоне.
     """
 
     def check_dir(self, root: Path) -> StandardsReport:

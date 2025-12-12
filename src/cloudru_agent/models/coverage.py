@@ -3,7 +3,7 @@ from pydantic import BaseModel
 
 
 class CoverageEntry(BaseModel):
-    scope: str          # например "UI" или "API"
+    scope: str          # например UI или API
     total_tests: int
     files: List[str]
 

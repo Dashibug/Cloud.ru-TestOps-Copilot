@@ -25,15 +25,12 @@ class OpenApiParser:
     def parse_text(self, text: str) -> ApiRequirementsDocument:
         """
         Универсальный вход: сюда можно передать содержимое yaml/json
-        (то, что прилетело из файла в Streamlit).
         """
         try:
             data = yaml.safe_load(text)
         except Exception:
             data = json.loads(text)
         return self._parse_dict(data)
-
-    # --- внутренности ---
 
     def _parse_dict(self, data: Dict[str, Any]) -> ApiRequirementsDocument:
         feature = data.get("info", {}).get("title", "Evolution Compute API v3")
@@ -53,7 +50,6 @@ class OpenApiParser:
                     continue
 
                 section = self._infer_section(op.get("tags") or [], path)
-                # по условиям кейса 2 нас интересуют только VMs / Disks / Flavors
                 if section not in ("VMs", "Disks", "Flavors"):
                     continue
 
@@ -121,11 +117,9 @@ class OpenApiParser:
 
     @staticmethod
     def _pick_success_code(responses: Dict[str, Any]) -> int:
-        # сначала пытаемся взять один из "классических" кодов успеха
         for candidate in ("200", "201", "202", "204"):
             if candidate in responses:
                 return int(candidate)
-        # потом — первый неошибочный код
         for code in responses.keys():
             try:
                 code_int = int(code)
@@ -133,7 +127,6 @@ class OpenApiParser:
                 continue
             if code_int < 400:
                 return code_int
-        # запасной вариант
         return 200
 
     @staticmethod

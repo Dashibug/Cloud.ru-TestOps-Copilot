@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 
 class CoverageEntry(BaseModel):
-    scope: str  # "UI" или "API"
+    scope: str  # UI или API
     total_tests: int
     files: List[str]
 
@@ -41,7 +41,7 @@ class CoverageAnalyzer:
                 code = file.read_text(encoding="utf-8")
                 tree = ast.parse(code)
             except Exception:
-                # если файл битый — просто пропускаем, можно добавить issue в стандарты
+                # если файл битый - пропускаем
                 continue
 
             tests_in_file = sum(

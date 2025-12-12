@@ -4,8 +4,8 @@ from pydantic import BaseModel
 
 class UiRequirement(BaseModel):
     id: str
-    block: str          # например "BLOCK_1_START_PAGE"
-    title: str          # текст требования
+    block: str
+    title: str
     description: Optional[str] = None
     priority: str = "NORMAL"  # CRITICAL / NORMAL / LOW
 

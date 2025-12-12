@@ -5,6 +5,7 @@ from typing import Optional
 from cloudru_agent.models.requirements import UiRequirementsDocument, ApiRequirementsDocument
 from cloudru_agent.llm.evolution_client import EvolutionClient
 
+# --- шаблон для UI ---
 UI_MANUAL_TEMPLATE = Template(
     '''import allure
 from pytest import mark
@@ -89,7 +90,7 @@ class AllureManualGenerator:
         out.mkdir(parents=True, exist_ok=True)
 
         for req in doc.requirements:
-            # генерим AAA через LLM (если он есть)
+            # генерим AAA через LLM
             if llm is not None:
                 steps = llm.ui_aaa_for_requirement(req)
                 arrange_step = steps["arrange"]
@@ -136,7 +137,6 @@ class AllureManualGenerator:
                     act_step = steps.get("act", act_step)
                     assert_step = steps.get("assert", assert_step)
                 except Exception:
-                    # на демо лучше не падать от LLM, а просто использовать шаблон
                     pass
 
             class_name = f"{req.section}ApiTests"

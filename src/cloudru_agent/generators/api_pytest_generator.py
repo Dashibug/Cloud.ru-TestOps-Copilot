@@ -90,7 +90,6 @@ class ApiPytestGenerator:
                     act_step = steps.get("act", act_step)
                     assert_step = steps.get("assert", assert_step)
                 except Exception:
-                    # на демо не падаем, просто остаёмся на дефолте
                     pass
 
                 # 2) реальный Python-код для requests
@@ -107,7 +106,6 @@ class ApiPytestGenerator:
                     if ass:
                         assert_code_lines = ass
                 except Exception:
-                    # если LLM не смогла сгенерить код — оставляем дефолт
                     pass
 
             arrange_code = "\n        ".join(arrange_code_lines)

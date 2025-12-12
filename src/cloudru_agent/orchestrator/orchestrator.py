@@ -13,18 +13,30 @@ from cloudru_agent.analyzers.standards_checker import StandardsChecker
 
 class AgentOrchestrator:
     """
-    Главный координатор: решает, какие агенты вызывать и в каком порядке.
+    Главный координатор: решает, какие модули вызывать и в каком порядке.
+    Поддерживает любой UI-продукт через ui_base_url и ui_feature_name.
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        ui_base_url: str = "https://cloud.ru/calculator",
+        ui_feature_name: str = "UI продукта",
+    ) -> None:
+        # общие компоненты
         self.ui_parser = UiRequirementsParser()
         self.openapi_parser = OpenApiParser()
         self.manual_generator = AllureManualGenerator()
-        self.ui_auto_generator = UiPytestGenerator()
         self.api_auto_generator = ApiPytestGenerator()
         self.coverage_analyzer = CoverageAnalyzer()
         self.standards_checker = StandardsChecker()
         self.llm = EvolutionClient()
+
+        # параметры UI-продукта
+        self.ui_base_url = ui_base_url
+        self.ui_feature_name = ui_feature_name
+
+        # генератор UI-автотестов знает BASE_URL
+        self.ui_auto_generator = UiPytestGenerator(base_url=ui_base_url)
 
     # =====================================================================
     # UI
@@ -33,8 +45,16 @@ class AgentOrchestrator:
     def generate_ui_from_text(self, text: str, output_dir: str) -> None:
         """
         Кейс 1: текст требований -> Evolution FM -> требования -> ручные кейсы + автотесты.
+
+        Парсер получает feature, чтобы:
+        - подставить его в модель вместо «Cloud.ru Price Calculator»;
+        - сохранить в UiRequirementsDocument.feature (для генераторов и ревизора).
         """
-        requirements_doc = self.ui_parser.parse_text_with_llm(text, self.llm)
+        requirements_doc = self.ui_parser.parse_text_with_llm(
+            text,
+            self.llm,
+            feature=self.ui_feature_name,
+        )
 
         manual_dir = Path(output_dir) / "manual_ui"
         auto_dir = Path(output_dir) / "auto_ui"
@@ -71,12 +91,10 @@ class AgentOrchestrator:
             -> файл: test_ui_req_main_page_display.py
         """
         for req in requirements_doc.requirements:
-            # Правило ИМЕНИ ФАЙЛА должно совпадать с генератором UiPytestGenerator
             file_name = f"test_ui_{req.id.lower()}.py"
             test_path = auto_dir / file_name
 
             if not test_path.exists():
-                # если по какой-то причине файл не найден — просто пропускаем
                 continue
 
             raw_code = test_path.read_text(encoding="utf-8")
@@ -84,7 +102,7 @@ class AgentOrchestrator:
             has_fixme = "FIXME" in raw_code or "pass  # FIXME" in raw_code
 
             if has_fixme:
-                # если есть заглушки — считаем тест заведомо плохим, не спрашивая ревизора
+                # если есть заглушки - считаем тест заведомо плохим, не спрашивая ревизора
                 review = {
                     "ok": False,
                     "problems": [
@@ -224,7 +242,6 @@ class AgentOrchestrator:
 
             raw_code = test_path.read_text(encoding="utf-8")
 
-            # считаем тест автоматически плохим, если есть:
             has_todo = "TODO" in raw_code or "pass" in raw_code
 
             if has_todo:
@@ -238,7 +255,6 @@ class AgentOrchestrator:
                 try:
                     review = self.llm.review_api_test(req, raw_code)
                 except Exception:
-                    # если ревизор упал — не ломаем пайплайн
                     continue
 
             if review.get("ok", True):
