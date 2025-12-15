@@ -57,7 +57,8 @@ source .venv/bin/activate
 # .venv\Scripts\activate
 
 pip install -U pip
-pip install -r requirements.txt
+pip install -r src/requirements.txt
+
 ```
 
 #### 2. Установка браузеров Playwright
