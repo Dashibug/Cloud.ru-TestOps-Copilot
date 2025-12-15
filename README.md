@@ -58,10 +58,12 @@ source .venv/bin/activate
 
 pip install -U pip
 pip install -r src/requirements.txt
+
+```
+
 > Важно: файл requirements.txt находится в папке src/,
 > поэтому pip install вызывается с путём src/requirements.txt именно из корня репозитория.
 
-```
 
 #### 2. Установка браузеров Playwright
 
