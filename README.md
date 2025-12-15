@@ -45,8 +45,8 @@
 #### 1. Клонирование и установка зависимостей
 
 ```bash
-git clone <repo_url>
-cd <repo_folder>
+git clone https://github.com/Dashibug/Cloud.ru-TestOps-Copilot.git
+cd Cloud.ru-TestOps-Copilot         
 
 python -m venv .venv
 
